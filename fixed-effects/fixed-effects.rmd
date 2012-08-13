@@ -2,11 +2,14 @@
 
 The following document implements the fixed effects meta-analysis procedure outlined by Borenstein, Hedges, Higgins, and Rothstein (2009) pages 65 to 97.
 
-
-# Generate sample data
-```{r}
+```{r init, message=FALSE}
 set.seed(1234)
+library(metafor)
+```
 
+
+# Function to generate data
+```{r}
 sample_r_data <- function(true_r, n) {
     #true_r: true population correlations
     #n: vector of sample sizes for each study    
@@ -31,6 +34,8 @@ sample_r_data <- function(true_r, n) {
     data.frame(n, Y, Vy, SEy)
 }
 ```
+
+The above code can be used to generate random correlations given a true population correlation and a vector of sample sizes. It also returns approximate variances and standard errors for the correlations.
 
 
 # Performing a fixed effect meta-analysis
@@ -65,22 +70,59 @@ fixed_effect_meta_analysis <- function(Y, Vy, ci=.95) {
     p <- 2 * (1 - pnorm(abs(Z)))
 
     # return values
-    list(studies=cbind(Y, Vy, W),
+    list(studies=cbind(Y, Vy, W, SEy=sqrt(Vy)),
          M=M, Vm=Vm, SEm=SEm, ci=ci, ci_limits=c(LLm, ULm),
          test=c(Z=Z, p=p))
 }
 ```
 
+The above function implements the procedure for fixed-effect meta analysis outlined by the Borenstein et al (2009).  The main arguments are the vector of effect sizes $Y_i$ and the vector of variances for the effect sizes $V_{Y_{i}}$. The method is designed to work with effect sizes other than correlations such as mean differences. 
+
 
 # Putting it all together
+## Example 1: Five studies with increasing sample size
 ```{r}
 meta1 <- sample_r_data(true_r = .3, n = seq(50, 250, 50))
-fixed_effect_meta_analysis(meta1$Y, meta1$Vy)
-
-meta2 <- sample_r_data(true_r = .1, n = rep(100, 10))
-fixed_effect_meta_analysis(meta2$Y, meta2$Vy)
+(meta1_summary <- fixed_effect_meta_analysis(meta1$Y, meta1$Vy))
 ```
 
+* This first example generates five correlations with sample sizes increasing from 50 to 250.
+* The estimate of the oveall correlation, $M$, is significantly different from zero.
+* Two of the sample estimates did not have (1 and 3) did not have statistically significant correlations.
+
+
+```{r}
+meta1$study_name <- paste0(1:5, ': n=',as.character(meta1$n))
+forest(meta1$Y, sei=meta1$SEy, slab=meta1$study_name, xlab='r',
+       at=seq(-.25, .75, .25))
+abline(v=.3)
+abline(v=meta1_summary$M, col='red', lty=2)
+```
+
+* `forest` is a method in the `metafor` package which generates a forest plot.
+* The plot shows how the standard error gets smaller with 
+* The line in read shows the sample estimate of the true correlation, and the line in black shows the true population correlation.
+
+## Example 2 
+```{r}
+meta2 <- sample_r_data(true_r = .1, n = rep(100, 10))
+(meta2_summary <- fixed_effect_meta_analysis(meta2$Y, meta2$Vy))
+```
+
+* In this second example, all the 10 datasets have the same sample size, $n=100$.
+* It shows how the standard error for each effect size $SE_{Y_i}$ is greater than the standard error for the overall estimate, $SE_M$.
+
+
+```{r}
+meta2$study_name <- paste0(1:10, ': n=',as.character(meta2$n))
+forest(meta2$Y, sei=meta2$SEy, slab=meta2$study_name, xlab='r',
+       at=seq(-.25, .75, .25))
+abline(v=.1)
+abline(v=meta2_summary$ci_limits, col='blue', lty=2)
+abline(v=meta2_summary$M, col='blue')
+```
+
+* The black line indicates the true value. The thick blue line indicates the sample estimate of the overall value. The dotted blue lines indicate 95% confidence intervals for the overall value.
 
 # Testing on examples from book
 ```{r}
@@ -90,6 +132,6 @@ fixed_effect_meta_analysis(
     Vy = c(0.033, 0.031, 0.050, 0.011, 0.043, 0.023))
 ```
 
-The results are basically are approximately those provided on page 90 to 91. 
-I used rounded values of $V_M$ and $Y$ from Table 14.2, and I used a more precise value for 95% confidence interval calculation.
+The results are approximately those provided on pages 90 to 91. 
+I used rounded values of $V_M$ and $Y$ from Table 14.2, and I used a more precise value for 95% confidence interval calculations than 1.96.
 
