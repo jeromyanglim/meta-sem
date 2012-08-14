@@ -48,7 +48,7 @@ sample_r_data <- function(true_r, n) {
 The above code can be used to generate random correlations given a true population correlation and a vector of sample sizes. It also returns approximate variances and standard errors for the correlations.
 
 
-# Performing a fixed effect meta-analysis
+# Performing a fixed-effect meta-analysis
 
 
 ```r
@@ -267,4 +267,45 @@ fixed_effect_meta_analysis(Y = c(0.095, 0.277, 0.367, 0.664, 0.462,
 
 The results are approximately those provided on pages 90 to 91. 
 I used rounded values of $V_M$ and $Y$ from Table 14.2, and I used a more precise value for 95% confidence interval calculations than 1.96.
+
+
+
+```r
+fixed_effect_meta_analysis(Y = c(0.5493, 0.6931, 0.4236, 0.2027, 
+    0.8673, 0.4847), Vy = c(0.027, 0.0115, 0.0455, 0.0025, 0.0175, 0.0213), 
+    ci = 1 - 2 * (1 - pnorm(1.96)))
+```
+
+```
+## $studies
+##           Y     Vy      W    SEy
+## [1,] 0.5493 0.0270  37.04 0.1643
+## [2,] 0.6931 0.0115  86.96 0.1072
+## [3,] 0.4236 0.0455  21.98 0.2133
+## [4,] 0.2027 0.0025 400.00 0.0500
+## [5,] 0.8673 0.0175  57.14 0.1323
+## [6,] 0.4847 0.0213  46.95 0.1459
+## 
+## $M
+## [1] 0.3743
+## 
+## $Vm
+## [1] 0.001538
+## 
+## $SEm
+## [1] 0.03922
+## 
+## $ci
+## [1] 0.95
+## 
+## $ci_limits
+## [1] 0.2974 0.4512
+## 
+## $test
+##     Z     p 
+## 9.543 0.000 
+## 
+```
+
+
 

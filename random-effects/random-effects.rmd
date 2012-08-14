@@ -1,0 +1,131 @@
+# Random-effects meta analysis
+
+The following document implements the random-effects meta-analysis procedure outlined by Borenstein, Hedges, Higgins, and Rothstein (2009) pages 72 to 75.
+
+```{r init, message=FALSE}
+set.seed(1234)
+library(metafor)
+```
+
+
+# Function to generate data
+The data generating mechanism is
+
+$$\begin{align}
+Y_i  & = \mu + \zeta_i + \epsilon_i \\
+\zeta_i & \sim N(0, \tau^2) \\
+\epsilon_i & \sim N(0, V_{Y_i})
+\end{align}
+$$
+
+where 
+
+* $Y_i$ is the observed effect for the $i$th study, 
+* $\mu$ is the overall mean effect, 
+* $\zeta_i$ is the true deviation of the effect of $i$th study from $\mu$, and 
+* $\tau^2$ is the variance of the study deviation effects
+* $\epsilon_i$ is the deviation of the $i$th study from the studies true effect.
+* $V_{Y_i}$ is the variance of the effect due to sampling error.
+
+Note that I have assumed that $\zeta_i$ and $\epsilon_i$ both follow a normal distribution. Other distributions would be possible.
+
+
+```{r}
+sample_r_data_random <- function(true_mu, true_tau, n) {
+    #true_r: true population correlations
+    #n: vector of sample sizes for each study    
+    rcor <- function(true_r, n) {
+        x <- rnorm(n)
+        y <- rnorm(n, true_r * x, sqrt(1 - true_r^2))
+        cor(x, y)
+    }
+    
+    # true_r
+    true_r <- rnorm(n=length(n), mean=true_mu, sd=true_tau)
+    
+    # sample correlations
+    Y <- sapply(seq(n), function(X) rcor(true_r[X], n=n[X]))
+    
+    # note that this is only approximate
+    approx_variance <- function(r, n) (1 - r^2)^2 / (n - 1)
+    
+    # Variance of correlation 
+    Vy <- approx_variance(Y, n)
+    
+    # Standard error of correlation
+    SEy <- sqrt(Vy)
+    
+    data.frame(n, true_r, Y, Vy, SEy)
+}
+
+
+```
+
+
+# Performing a random-effects meta-analysis
+```{r}
+random_effects_meta_analysis <- function(Y, Vy, ci=.95) {
+    # Y: vector of effect sizes (e.g., r correlations)
+    # Vy: vector 
+    # ci: scalar,  confidence interval: 0 < ci < 1
+    stopifnot(length(Y) == length(Vy))
+    
+    get_tau_square <- function(Y, Vy) {
+        W <- 1/ Vy
+        df <- length(Y) - 1
+        Q <- sum(W * Y^2) - sum(W*Y)^2 / sum(W)
+        C <- sum(W) - sum(W^2) / sum(W)
+        T_square <- (Q - df) / C
+        list(T_square=T_square, W=W, Q=Q, C=C, df=df)
+    }
+    
+    T_square <- get_tau_square(Y, Vy)
+    
+    
+    Vy_star <- Vy + T_square$T_square    
+    W_star <- 1 / Vy_star
+    M_star <- sum(W_star * Y) /sum(W_star)
+    
+    # variance of summary effect
+    Vm_star <- 1 / sum(W_star)
+    
+    # standard error of summary effect
+    SEm_star <- sqrt(Vm_star)
+    
+    # Confidence interval for summary effect
+    SEm_multiple <- abs(qnorm((1 - ci) / 2))
+    LLm_star <- M_star - SEm_star * SEm_multiple
+    ULm_star <- M_star + SEm_star * SEm_multiple
+    
+    # z-value for test of null hypothesis
+    Z_star <- M_star / SEm_star
+    
+    # two tailed p-value
+    p_star <- 2 * (1 - pnorm(abs(Z_star)))
+
+    # return values
+    list(studies=cbind(Y, Vy, W=T_square$W, SEy=sqrt(Vy), W_star),
+         T_square=T_square,
+         M_star=M_star, Vm_star=Vm_star, SEm_star=SEm_star, ci=ci, ci_limits=c(LLm_star, ULm_star),
+         test=c(Z_star=Z_star, p_star=p_star))
+}
+
+meta1 <- sample_r_data_random(.3, .1, rep(100,5))
+random_effects_meta_analysis(meta1$Y, meta1$Vy)
+```
+
+
+# Testing on examples from book
+```{r}
+# Table 14.2
+random_effects_meta_analysis(
+    Y = c(0.095, 0.277, 0.367, 0.664, 0.462, 0.185),
+    Vy = c(0.033, 0.031, 0.050, 0.011, 0.043, 0.023),
+    ci = 1 - 2*(1 - pnorm(1.96)))
+
+# Table 14.9
+random_effects_meta_analysis(
+    Y = c(0.5493, 0.6931,0.4236,0.2027,0.8673,0.4847),
+    Vy = c(0.0270,0.0115,0.0455,0.0025,0.0175,0.0213),
+    ci = 1 - 2*(1 - pnorm(1.96)))
+```
