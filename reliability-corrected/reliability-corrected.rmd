@@ -1,0 +1,100 @@
+The following implements some of the functions from Hunter and Schmidt (2004) page 95 onwards on "error of measurement and correction for attenuation.
+
+# Correction based on true 
+```{r}
+correct_true_correlation <- function(rho_xy, rho_xx, rho_yy) {
+    # calculate reliabilty based on population correlations
+    # and reliabilities
+    stopifnot(rho_xy >= -1 & rho_xy <= 1)
+    stopifnot(rho_xx >= 0 & rho_xx <= 1)
+    stopifnot(rho_yy >= 0 & rho_yy <= 1)
+    stopifnot(rho_yy >= 0 & rho_yy <= 1)
+    stopifnot(rho_xy <= (sqrt(rho_xx) * sqrt(rho_yy)))
+    
+    rho_xy / (sqrt(rho_xx) * sqrt(rho_yy))   
+}
+
+correct_true_correlation(.5, .8, .8)
+```
+
+# Uncorrected true correlation
+Alternatively, the corrected true correlation may be known along with the reliability of observed x and observed y. From this, the uncorrected true correlation can be calculated.
+
+```{r}
+uncorrect_true_correlation <- function(rho_UT, rho_xx, rho_yy) {
+     sqrt(rho_xx) * sqrt(rho_yy) * rho_UT
+}
+
+uncorrect_true_correlation(.5, .8, .8)
+correct_true_correlation(.4, .8, .8) # restore
+```
+
+# Standard error of correlation
+```{r}
+standard_error_correlation <- function(r, n) {
+    (1- r^2) / sqrt(n-1)
+}
+
+ci_correlation <- function(r, n, ci=.95) {
+    z <- qnorm(1 - (1 - ci) /2)
+    se_r <- standard_error_correlation(r, n)
+    ci_diff <- z * se_r
+    ci_r <- r + c(-1, 1) * ci_diff   
+    names(ci_r) <- c('lower_ci', 'upper_ci')
+    ci_r
+}
+
+ci_correlation_reliability_correct <- function(r, n, rho_xx, rho_yy, ci=.95) {
+    ci_r <- ci_correlation(r, n, ci=ci)
+    ci_rho <- correct_true_correlation(ci_r[1], rho_xx, rho_yy)
+    ci_rho[2] <- correct_true_correlation(ci_r[2], rho_xx, rho_yy)
+    names(ci_rho) <- c('lower_ci', 'upper_ci')
+    ci_rho
+}
+
+corrected_error_variance <- function(rxy, n, rho_xx, rho_yy) {
+    sigma_e_squared <- (1 - rxy^2)^2 / (n-1)
+    reliability_denominator <- rho_xx * rho_yy
+    sigma_e_squared / reliability_denominator
+}
+
+```
+
+
+# Page 97 Example
+The following code implements the example on page 97 of Hunter and Schmidt. 
+
+```{r}
+rho_TU <- .60
+rho_xx <- .45
+rho_yy <- .55
+N <- 100
+r_xy <- .20
+
+# calculate true correlation
+(rho_xy <- uncorrect_true_correlation(rho_TU, rho_xx, rho_yy))
+
+# percentage reduction from corrected to uncorrected
+round(((rho_TU - rho_xy) / rho_TU), 3)
+
+# standard error of uncorrected correlation
+standard_error_correlation(rho_xy, N)
+
+# standard error of uncorrected observed correlation
+standard_error_correlation(r_xy, N)
+
+# ci uncorrected observed
+round(ci_correlation(r_xy, N, .95), 2)
+
+# ci corrected
+round(ci_correlation_reliability_correct(r_xy, N, rho_xx, rho_yy, .95), 2)
+
+# corrected observed correlation
+(rc_xy <- correct_true_correlation(r_xy, rho_xx, rho_yy))
+
+# corrected error variance
+corrected_error_variance(r_xy, N, rho_xx, rho_yy)
+
+# corrected standard error 
+sqrt(corrected_error_variance(r_xy, N, rho_xx, rho_yy))
+```
