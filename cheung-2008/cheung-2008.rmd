@@ -1,0 +1,138 @@
+The following set of analyses explore the article by Cheung (2008)
+
+http://www.statmodel.com/download/MCheung.pdf
+
+Cheung, M.W.L. (2008). A model for integrating fixed-, random-, and mixed-effects meta-analyses into structural equation modeling. Psychological Methods, 13, 182.
+
+# Fixed effects meta-analysis
+Let's create some data from the model for a fixed-effects meta-analysis.
+```{r message=FALSE}
+library(metafor)
+```
+
+```{r}
+k <- 10
+beta_fixed <- .2
+meta_data <- data.frame(k=seq(k), sigma=runif(k, 0.05, 0.20))
+meta_data$sigma_sq <- meta_data$sigma^2
+meta_data$y <- rnorm(k, mean=beta_fixed, sd=meta_data$sigma)
+```
+
+
+```{r}
+fixed_effects_meta_analysis <- function(y, sigma_sq) {
+    # checks
+    if (length(y) != length(sigma_sq)) {
+        stop('length of y and sigma_sq should be equal')        
+    }
+    if (any(sigma_sq <= 0)) {
+        stop('non-positive sigma_sq: All sigma_sq must be positive')        
+    }
+    
+        
+    k <- length(y)
+    w <- 1/sigma_sq    
+    beta_hat_fixed <- sum(w*y) / sum(w)
+    s_squared_hat_fixed <- 1/ sum(w)
+    s_hat_fixed <- sqrt(s_squared_hat_fixed)
+    
+    Z1 <- beta_hat_fixed / s_hat_fixed
+    Z1_p_two_tail <- 1 - pnorm(abs(Z1))
+    
+    q <- w * (y - beta_hat_fixed)^2
+    Q <- sum(q)
+    Q_df <- k - 1
+    Q_p <- 1 - pchisq(Q, df=Q_df)
+
+    meta_table <- data.frame(y, sigma_sq, sigma=sqrt(sigma_sq), w, q)
+    results <- list(meta_table=meta_table,
+         beta_hat_fixed=beta_hat_fixed,
+         s_squared_hat_fixed=s_squared_hat_fixed,
+         Z1=c(Z1=Z1, p_two_tail=Z1_p_two_tail),
+         Q=c(Q=Q, df=Q_df, p=Q_p))
+    class(results) <- 'fixed_effects_meta_analysis'
+    results
+}
+
+print.fixed_effects_meta_analysis <- function(x, digits=3, ...) {    
+    print(lapply(x, function(X) round(X, digits=digits)))    
+}
+
+plot.fixed_effects_meta_analysis <- function(x, ...) {
+    require(metafor)
+    forest.default(x=x$meta_table$y,
+                   se=x$meta_table$sigma,
+                   refline=x$beta_hat_fixed,
+                    ...)
+}
+                                          
+meta1 <- fixed_effects_meta_analysis(y=meta_data$y, 
+                           sigma_sq=meta_data$sigma_sq)
+```
+
+* The above code implements equations 2 to 5 in Cheung (2008).
+* I created an S3 class. A `print` method is used to make display of the results a little easier to read. This is called by default when the return object printed to the console.
+* A `plot` method produces a forest plot using the `forest.default` function in the `metafor` pakcage.
+
+```{r}
+plot(meta1)
+meta1
+```
+
+# Models with covariates
+```{r}
+k <- 10
+beta <- c(.2, .3)
+meta_data_covariates <- data.frame(k=seq(k), 
+                                   sigma=runif(k, 0.05, 0.20),
+                                   x1=c(rep(1, k/2), rep(0, k/2)),
+                                   x2=c(rep(0, k/2), rep(1, k/2)))
+meta_data_covariates$sigma_sq <- meta_data$sigma^2
+meta_data_covariates$beta <- as.matrix(meta_data_covariates[,c('x1', 'x2')]) %*% beta
+meta_data_covariates$y <- rnorm(k, 
+                                mean=meta_data_covariates$beta, 
+                                sd=meta_data_covariates$sigma)
+```
+
+```{r}
+fixed_effects_covariates_meta_analysis <- function(y, X, sigma_sq) {
+    # y: vector of effect sizes of length k, 
+    # X: design matrix (k rows by p columns)
+    # Ve: vector of effect size variances of length k
+    p <- ncol(X)
+    k <- length(y)
+    
+    Ve <- diag(sigma_sq)
+    beta_hat <- solve(t(X) %*% solve(Ve) %*% X) %*% t(X) %*% solve(Ve) %*% y
+
+    V_beta_hat <- solve(t(X) %*% solve(Ve) %*% X)
+    
+    Q_tilde <- t(beta_hat) %*% solve(V_beta_hat) %*% beta_hat
+    Q_df <- p - 1
+    Q_p <- 1- pchisq(Q_tilde, df=Q_df)
+    
+    # significance test for H0: Beta_i = 0
+    beta_hat <- as.vector(beta_hat)
+    Z2 <- sapply(seq(beta_hat), function(X) beta_hat[X] / sqrt(V_beta_hat[X,X]))
+    Z2_p_two_tail <- 1 - pnorm(abs(Z2))    
+    
+
+    results <- list(meta_table=data.frame(y, X),
+         V_beta_hat=V_beta_hat,
+         beta_hat=data.frame(beta_hat, z=Z2, p_two_tailed=Z2_p_two_tail),
+         Q=c(Q=Q_tilde, df=Q_df, p=Q_p))
+    class(results) <- c('fixed_effects_covariates_meta_analysis', 
+                        'fixed_effects_meta_analysis')
+    results
+    
+}
+
+
+fixed_effects_covariates_meta_analysis(
+    y = meta_data_covariates$y,
+    X = as.matrix(meta_data_covariates[,c('x1', 'x2')]),
+    sigma_sq = meta_data_covariates$sigma_sq)
+                                                  
+```
+
+
